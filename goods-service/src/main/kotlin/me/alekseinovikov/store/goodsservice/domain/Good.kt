@@ -1,64 +1,73 @@
 package me.alekseinovikov.store.goodsservice.domain
 
-import kotlin.jvm.Throws
-
 data class Good(
-    private val id: Identifier,
-    private var name: String,
-    private var description: String,
-    private var deleted: Boolean = false,
-    private val version: Version = Version()
+    val id: Identifier,
+    var name: String,
+    var description: String,
+    var deleted: Boolean = false,
+    val version: Version = Version()
 ) {
+    constructor() : this(Identifier(), "", "")
+    constructor(id: Identifier) : this(id, "", "")
 
-    private val eventsToEmmit = mutableListOf<Event>()
+    val eventsToEmmit = mutableListOf<GoodsEvent>()
 
     @Throws(OptimisticLockException::class, GoodAlreadyDeletedException::class)
-    fun apply(command: Command): List<Event> {
-        checkVersionAndDeleted(command)
+    fun apply(goodsCommand: GoodsCommand): Result<Good> {
+        val validationResult = checkVersionAndDeleted(goodsCommand)
+        if (validationResult.isFailure) {
+            return Result.failure(validationResult.exceptionOrNull()!!)
+        }
 
-        when (command) {
-            is Command.CreateGood -> apply(command)
-            is Command.DeleteGood -> apply(command)
-            is Command.ChangeGoodUpdate -> apply(command)
+        when (goodsCommand) {
+            is GoodsCommand.Create -> apply(goodsCommand)
+            is GoodsCommand.Delete -> applyDelete()
+            is GoodsCommand.Update -> apply(goodsCommand)
         }
 
         eventsToEmmit.forEach { apply(it) }
-        return eventsToEmmit
+        return Result.success(this)
     }
 
-    fun apply(event: Event) {
-        when (event) {
-            is Event.GoodCreated -> {
-                name = event.name
-                description = event.description
+    fun apply(goodsEvent: GoodsEvent): Result<Unit> {
+        when (goodsEvent) {
+            is GoodsEvent.Created -> {
+                name = goodsEvent.name
+                description = goodsEvent.description
             }
-            is Event.GoodNameChanged -> name = event.name
-            is Event.GoodDescriptionChanged -> description = event.description
-            is Event.GoodDeleted -> deleted = true
+
+            is GoodsEvent.NameChanged -> name = goodsEvent.name
+            is GoodsEvent.DescriptionChanged -> description = goodsEvent.description
+            is GoodsEvent.Deleted -> deleted = true
         }
+
+        this.version.update(goodsEvent.version)
+        return Result.success(Unit)
     }
 
-    private fun checkVersionAndDeleted(command: Command) {
-        if (command.optimisticVersion != version) {
-            throw OptimisticLockException(id, version)
+    private fun checkVersionAndDeleted(goodsCommand: GoodsCommand): Result<Unit> {
+        if (goodsCommand.optimisticVersion != version) {
+            return Result.failure(OptimisticLockException(id, version, goodsCommand.optimisticVersion))
         }
 
         if (deleted) {
-            throw GoodAlreadyDeletedException(id)
+            return Result.failure(GoodAlreadyDeletedException(id))
         }
+
+        return Result.success(Unit)
     }
 
-    private fun apply(command: Command.CreateGood) {
-        eventsToEmmit.add(Event.GoodCreated(id, command.name, command.description))
+    private fun apply(goodsCommand: GoodsCommand.Create) {
+        eventsToEmmit.add(GoodsEvent.Created(id, version.next(), goodsCommand.name, goodsCommand.description))
     }
 
-    private fun apply(command: Command.DeleteGood) {
-        eventsToEmmit.add(Event.GoodDeleted(id))
+    private fun applyDelete() {
+        eventsToEmmit.add(GoodsEvent.Deleted(id, version.next()))
     }
 
-    private fun apply(command: Command.ChangeGoodUpdate) {
-        eventsToEmmit.add(Event.GoodNameChanged(id, command.name))
-        eventsToEmmit.add(Event.GoodDescriptionChanged(id, command.description))
+    private fun apply(goodsCommand: GoodsCommand.Update) {
+        eventsToEmmit.add(GoodsEvent.NameChanged(id, version.next(), goodsCommand.name))
+        eventsToEmmit.add(GoodsEvent.DescriptionChanged(id, version.next(), goodsCommand.description))
     }
 
 }

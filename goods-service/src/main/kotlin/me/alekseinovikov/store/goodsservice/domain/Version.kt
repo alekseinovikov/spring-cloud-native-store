@@ -1,15 +1,16 @@
 package me.alekseinovikov.store.goodsservice.domain
 
-data class Version(val version: ULong) {
+data class Version(var version: ULong) {
 
     constructor(): this(0u)
 
     fun next(): Version {
-        return Version(version + 1u)
+        this.version++
+        return Version(this.version)
     }
 
-    override fun equals(other: Any?): Boolean {
-        return super.equals(other)
+    fun update(version: Version) {
+        this.version = version.version
     }
 
     override fun hashCode(): Int {
@@ -18,6 +19,17 @@ data class Version(val version: ULong) {
 
     operator fun compareTo(other: Version): Int {
         return version.compareTo(other.version)
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as Version
+
+        if (version != other.version) return false
+
+        return true
     }
 
 }

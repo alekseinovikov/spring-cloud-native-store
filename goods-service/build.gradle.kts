@@ -33,6 +33,9 @@ dependencies {
 
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
 	testImplementation("io.projectreactor:reactor-test")
+
+	testImplementation("org.testcontainers:postgresql:1.17.6")
+	testImplementation("org.testcontainers:r2dbc:1.17.6")
 }
 
 tasks.withType<KotlinCompile> {
